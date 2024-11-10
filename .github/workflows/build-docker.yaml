@@ -11,4 +11,5 @@ jobs:
         run: docker build ./api/ -t omerbenda98/devops-qr-code-api:latest
       - name: push image to Docker hub
         run: |
+          docker login -u omerbenda98 -p ${{secrets.DOCKER_HUB_TOKEN}}
           docker push omerbenda98/devops-qr-code-api:latest

@@ -13,12 +13,16 @@ app = FastAPI()
 
 # Allowing CORS for local testing
 origins = [
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "http://localhost:30000",
+    "http://192.168.49.2:30000",  # Add NodePort frontend URL
+    "*"  # Temporarily for testing
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -33,3 +33,48 @@ The front-end code exits in the `front-end-nextjs` directory. You can run the fr
 - Install the dependencies: `npm install`
 - Run the NextJS Server: `npm run dev`
 - Your Front-end Server should be running on `http://localhost:3000`
+
+## Running on Minikube
+
+This application is configured to run on Minikube using Kubernetes. Follow these steps to run the application:
+
+### Prerequisites
+
+- Minikube installed
+- kubectl installed
+- Docker installed
+
+### Steps to Run
+
+1. Start Minikube:
+
+minikube start
+
+2. Apply the Kubernetes configurations:
+
+# Apply ConfigMaps
+
+kubectl apply -f backend-configmap.yaml
+kubectl apply -f frontend-configmap.yaml
+
+# Apply Services
+
+kubectl apply -f backend-service.yaml
+kubectl apply -f frontend-service.yaml
+
+# Apply Deployments
+
+kubectl apply -f backend-deployment.yaml
+kubectl apply -f frontend-deployment.yaml
+
+3. Set up port forwarding for the backend service (keep this terminal window open):
+
+kubectl port-forward service/backend-service 8000:8000
+
+4. In a new terminal, expose the frontend service (keep this terminal window open):
+
+minikube service frontend-service --url
+
+5. Access the application:
+   Use the URL provided by the minikube service command to access the frontend
+   The backend API will be accessible on http://localhost:8000

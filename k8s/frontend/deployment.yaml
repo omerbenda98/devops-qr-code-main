@@ -1,0 +1,35 @@
+# # frontend/configmap.yaml
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: frontend-config
+# data:
+#   # Use the Kubernetes service name instead of localhost
+#   NEXT_PUBLIC_API_URL: "http://backend-service:8000"
+# ---
+# frontend/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: omerbenda98/devops-qr-code-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: frontend-config
+                  key: NEXT_PUBLIC_API_URL

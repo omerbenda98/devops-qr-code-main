@@ -1,0 +1,13 @@
+# Terraform working directory (providers, plugins, etc.)
+.terraform/
+
+# Terraform state files (contain secrets & environment-specific data)
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Terraform plan output (binary, environment-specific)
+*.tfplan

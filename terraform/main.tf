@@ -234,32 +234,32 @@ resource "helm_release" "aws_load_balancer_controller" {
 }
 
 # EBS CSI Driver
-module "ebs_csi_driver_irsa_role" {
-  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.20"
+# module "ebs_csi_driver_irsa_role" {
+#   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+#   version = "~> 5.20"
 
-  role_name = "${local.name}-ebs-csi-driver"
+#   role_name = "${local.name}-ebs-csi-driver"
 
-  attach_ebs_csi_policy = true
+#   attach_ebs_csi_policy = true
 
-  oidc_providers = {
-    ex = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
-    }
-  }
+#   oidc_providers = {
+#     ex = {
+#       provider_arn               = module.eks.oidc_provider_arn
+#       namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
+#     }
+#   }
 
-  tags = local.tags
-}
+#   tags = local.tags
+# }
 
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = module.eks.cluster_name
-  addon_name               = "aws-ebs-csi-driver"
-  addon_version            = "v1.24.0-eksbuild.1"
-  service_account_role_arn = module.ebs_csi_driver_irsa_role.iam_role_arn
+# resource "aws_eks_addon" "ebs_csi_driver" {
+#   cluster_name             = module.eks.cluster_name
+#   addon_name               = "aws-ebs-csi-driver"
+#   addon_version            = "v1.24.0-eksbuild.1"
+#   service_account_role_arn = module.ebs_csi_driver_irsa_role.iam_role_arn
 
-  tags = local.tags
-}
+#   tags = local.tags
+# }
 
 # Create namespace for your application
 resource "kubernetes_namespace" "app" {
@@ -276,33 +276,33 @@ resource "kubernetes_namespace" "app" {
 }
 
 # Metrics Server for HPA
-resource "helm_release" "metrics_server" {
-  depends_on = [module.eks.eks_managed_node_groups]
+# resource "helm_release" "metrics_server" {
+#   depends_on = [module.eks.eks_managed_node_groups]
 
-  name       = "metrics-server"
-  repository = "https://kubernetes-sigs.github.io/metrics-server/"
-  chart      = "metrics-server"
-  namespace  = "kube-system"
-  version    = "3.11.0"
+#   name       = "metrics-server"
+#   repository = "https://kubernetes-sigs.github.io/metrics-server/"
+#   chart      = "metrics-server"
+#   namespace  = "kube-system"
+#   version    = "3.11.0"
 
-  values = [
-    yamlencode({
-      args = [
-        "--cert-dir=/tmp",
-        "--secure-port=4443",
-        "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
-        "--kubelet-use-node-status-port",
-        "--metric-resolution=15s"
-      ]
-      resources = {
-        requests = {
-          cpu    = "100m"
-          memory = "200Mi"
-        }
-      }
-    })
-  ]
-}
+#   values = [
+#     yamlencode({
+#       args = [
+#         "--cert-dir=/tmp",
+#         "--secure-port=4443",
+#         "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+#         "--kubelet-use-node-status-port",
+#         "--metric-resolution=15s"
+#       ]
+#       resources = {
+#         requests = {
+#           cpu    = "100m"
+#           memory = "200Mi"
+#         }
+#       }
+#     })
+#   ]
+# }
 
 
 # Create namespace for monitoring (Prometheus/Grafana)

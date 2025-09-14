@@ -16,7 +16,12 @@ export default function Home() {
       );
       const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/generate-qr/?url=${url}`;
       console.log("Full API URL:", apiUrl);
-      const response = await axios.post(apiUrl);
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/generate-qr/`,
+        {
+          url: url, // Send in body instead of query parameter
+        }
+      );
       setQrCodeUrl(response.data.qr_code_url);
     } catch (error) {
       console.error("Error generating QR Code:", error);

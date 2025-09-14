@@ -10,7 +10,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 
-ENV NEXT_PUBLIC_API_URL=/api
+# ENV NEXT_PUBLIC_API_URL=/api
 # copy the content of the local directory to the working directory
 COPY . .
 

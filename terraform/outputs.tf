@@ -144,3 +144,22 @@ output "configure_kubectl" {
   description = "Configure kubectl: make sure you're logged in with the correct AWS profile and run the following command to update your kubeconfig"
   value       = "aws eks --region ${var.aws_region} update-kubeconfig --name ${module.eks.cluster_name}"
 }
+
+output "s3_bucket_name" {
+  description = "Name of the S3 bucket for QR codes"
+  value       = aws_s3_bucket.qr_codes.bucket
+}
+
+output "s3_bucket_arn" {
+  description = "ARN of the S3 bucket for QR codes"
+  value       = aws_s3_bucket.qr_codes.arn
+}
+
+output "s3_bucket_domain_name" {
+  description = "Bucket domain name for QR codes"
+  value       = aws_s3_bucket.qr_codes.bucket_domain_name
+}
+output "ansible_deploy_command" {
+  description = "Command to deploy applications with Ansible"
+  value       = "cd ansible && ansible-playbook deploy-app.yml -e namespace=${var.app_namespace} -e s3_bucket_name=${aws_s3_bucket.qr_codes.bucket}"
+}

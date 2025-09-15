@@ -1,0 +1,8 @@
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: backend-config
+#   namespace: my-app
+# data:
+#   DATABASE_URL: "sqlite:///./test.db"
+#   S3_BUCKET_NAME: "my-qr-project-bucket"

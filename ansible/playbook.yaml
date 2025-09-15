@@ -1,0 +1,106 @@
+# ansible/deploy-app.yml
+---
+- name: Deploy Application to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_namespace: "{{ namespace | default('default') }}"
+    k8s_manifests_path: "../k8s"
+
+  tasks:
+    - name: Check if kubectl is available
+      command: kubectl version --client
+      register: kubectl_check
+      changed_when: false
+
+    - name: Verify cluster connection
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: kube-system
+      register: cluster_connection
+
+    - name: Create namespace if it doesn't exist
+      kubernetes.core.k8s:
+        name: "{{ app_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      when: app_namespace != "default"
+
+    - name: Find all YAML files in k8s directory (including subdirectories)
+      find:
+        paths: "{{ k8s_manifests_path }}"
+        patterns: "*.yaml,*.yml"
+        recurse: yes
+      register: k8s_files
+
+    - name: Display found manifest files
+      debug:
+        msg: "Found {{ k8s_files.files | length }} manifest files: {{ k8s_files.files | map(attribute='path') | map('basename') | list }}"
+
+    - name: Update backend ConfigMap with S3 bucket name
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: backend-config
+            namespace: "{{ app_namespace }}"
+          data:
+            AWS_DEFAULT_REGION: "us-east-1"
+            S3_BUCKET_NAME: "{{ s3_bucket_name }}"
+        merge_type: merge
+      when: s3_bucket_name is defined
+
+    - name: Deploy Kubernetes manifests
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ item.path }}"
+        namespace: "{{ app_namespace }}"
+      loop: "{{ k8s_files.files }}"
+      register: deploy_result
+
+    - name: Wait a moment for deployments to start
+      pause:
+        seconds: 10
+      when: deploy_result.changed
+
+    - name: Check deployment status
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: "{{ app_namespace }}"
+      register: deployments
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          Deployment: {{ item.metadata.name }}
+          Ready Replicas: {{ item.status.readyReplicas | default(0) }}/{{ item.spec.replicas }}
+          Status: {{ item.status.conditions[-1].type if item.status.conditions is defined else 'Unknown' }}
+      loop: "{{ deployments.resources }}"
+      when: deployments.resources is defined and deployments.resources | length > 0
+
+    - name: Get services information
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ app_namespace }}"
+      register: services
+
+    - name: Display service information
+      debug:
+        msg: |
+          Service: {{ item.metadata.name }}
+          Type: {{ item.spec.type }}
+          {% if item.spec.type == 'LoadBalancer' and item.status.loadBalancer.ingress is defined %}
+          External URL: {{ item.status.loadBalancer.ingress[0].hostname }}:{{ item.spec.ports[0].port }}
+          {% elif item.spec.type == 'ClusterIP' %}
+          Cluster IP: {{ item.spec.clusterIP }}:{{ item.spec.ports[0].port }}
+          {% endif %}
+      loop: "{{ services.resources }}"
+      when: services.resources is defined and services.resources | length > 0

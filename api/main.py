@@ -34,7 +34,7 @@ s3 = boto3.client(
     aws_access_key_id= os.getenv("AWS_ACCESS_KEY"),
     aws_secret_access_key= os.getenv("AWS_SECRET_KEY"))
 
-bucket_name = 'my-qr-project-bucket' # Add your bucket name here
+bucket_name = os.environ.get('S3_BUCKET_NAME', 'my-qr-project-bucket') 
 
 @app.post("/api/generate-qr/")
 async def generate_qr(url: str = Query(...)):

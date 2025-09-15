@@ -274,6 +274,20 @@ resource "kubernetes_namespace" "app" {
     }
   }
 }
+# Backend ConfigMap with S3 bucket name
+resource "kubernetes_config_map" "backend_config" {
+  depends_on = [kubernetes_namespace.app]
+
+  metadata {
+    name      = "backend-config"
+    namespace = var.app_namespace
+  }
+
+  data = {
+    AWS_DEFAULT_REGION = var.aws_region
+    S3_BUCKET_NAME     = aws_s3_bucket.qr_codes.bucket
+  }
+}
 
 # Metrics Server for HPA
 # resource "helm_release" "metrics_server" {
@@ -318,3 +332,88 @@ resource "kubernetes_namespace" "monitoring" {
     }
   }
 }
+################################################################################
+# S3 Bucket and IAM Permissions for QR Code Application
+################################################################################
+
+# S3 bucket for storing QR codes
+resource "aws_s3_bucket" "qr_codes" {
+  bucket = "my-qr-project-bucket-${random_string.bucket_suffix.result}"
+
+  tags = local.tags
+}
+
+resource "random_string" "bucket_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# S3 bucket public access configuration
+resource "aws_s3_bucket_public_access_block" "qr_codes" {
+  bucket = aws_s3_bucket.qr_codes.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+# S3 bucket policy for public read access to QR codes
+resource "aws_s3_bucket_policy" "qr_codes_public_read" {
+  depends_on = [aws_s3_bucket_public_access_block.qr_codes]
+  
+  bucket = aws_s3_bucket.qr_codes.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.qr_codes.arn}/*"
+      }
+    ]
+  })
+}
+
+# IAM policy for S3 access by EKS nodes
+resource "aws_iam_policy" "s3_qr_access" {
+  name        = "${local.name}-s3-qr-access"
+  description = "S3 access policy for QR code application"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.qr_codes.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.qr_codes.arn
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+# Attach S3 policy to EKS node group role
+resource "aws_iam_role_policy_attachment" "s3_qr_access" {
+  role       = module.eks.eks_managed_node_groups.main.iam_role_name
+  policy_arn = aws_iam_policy.s3_qr_access.arn
+}
+
+# Note: Monitoring stack (Prometheus/Grafana) will be deployed via Ansible
+# This keeps Terraform focused on infrastructure

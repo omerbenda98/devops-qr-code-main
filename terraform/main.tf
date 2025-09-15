@@ -14,6 +14,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.11"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.9"
+    }
   }
 }
 
@@ -156,6 +160,19 @@ module "eks" {
 }
 
 ################################################################################
+# Wait for cluster to be ready
+################################################################################
+
+resource "time_sleep" "wait_for_cluster" {
+  depends_on = [
+    module.eks.cluster_id,
+    module.eks.eks_managed_node_groups
+  ]
+  
+  create_duration = "60s"
+}
+
+################################################################################
 # Supporting Resources
 ################################################################################
 
@@ -252,14 +269,73 @@ resource "helm_release" "aws_load_balancer_controller" {
 #   tags = local.tags
 # }
 
-# resource "aws_eks_addon" "ebs_csi_driver" {
-#   cluster_name             = module.eks.cluster_name
-#   addon_name               = "aws-ebs-csi-driver"
-#   addon_version            = "v1.24.0-eksbuild.1"
-#   service_account_role_arn = module.ebs_csi_driver_irsa_role.iam_role_arn
+# EBS CSI Driver (as EKS Add-on - recommended approach)
+resource "aws_eks_addon" "ebs_csi_driver" {
+  depends_on = [time_sleep.wait_for_cluster]
+  
+  cluster_name      = module.eks.cluster_name
+  addon_name        = "aws-ebs-csi-driver"
+  addon_version     = "v1.25.0-eksbuild.1"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  
+  tags = local.tags
+}
 
-#   tags = local.tags
-# }
+# Add this to your Terraform main.tf
+resource "aws_iam_policy" "ebs_csi_policy" {
+  name        = "${local.name}-ebs-csi-policy"
+  description = "EBS CSI driver policy for creating volumes"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateVolume",
+          "ec2:DeleteVolume",
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:ModifyVolume",
+          "ec2:DescribeAvailabilityZones",
+          "ec2:DescribeInstances",
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeTags",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeVolumesModifications"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags"
+        ]
+        Resource = [
+          "arn:aws:ec2:*:*:volume/*",
+          "arn:aws:ec2:*:*:snapshot/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ec2:CreateAction" = [
+              "CreateVolume",
+              "CreateSnapshot"
+            ]
+          }
+        }
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+# Attach EBS policy to node group role
+resource "aws_iam_role_policy_attachment" "ebs_csi_policy" {
+  role       = module.eks.eks_managed_node_groups.main.iam_role_name
+  policy_arn = aws_iam_policy.ebs_csi_policy.arn
+}
 
 # Create namespace for your application
 resource "kubernetes_namespace" "app" {
@@ -291,7 +367,7 @@ resource "kubernetes_config_map" "backend_config" {
 
 # Metrics Server for HPA
 # resource "helm_release" "metrics_server" {
-#   depends_on = [module.eks.eks_managed_node_groups]
+#   depends_on = [time_sleep.wait_for_cluster]
 
 #   name       = "metrics-server"
 #   repository = "https://kubernetes-sigs.github.io/metrics-server/"
@@ -313,9 +389,16 @@ resource "kubernetes_config_map" "backend_config" {
 #           cpu    = "100m"
 #           memory = "200Mi"
 #         }
+#         limits = {
+#           cpu    = "200m"
+#           memory = "400Mi"
+#         }
 #       }
 #     })
 #   ]
+
+#   timeout = 300
+#   wait    = true
 # }
 
 

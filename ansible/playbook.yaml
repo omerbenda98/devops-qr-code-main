@@ -1,6 +1,6 @@
-# ansible/deploy-app.yml
+# ansible/playbook.yaml
 ---
-- name: Deploy Application to Kubernetes
+- name: Deploy Application and Monitoring to Kubernetes
   hosts: localhost
   connection: local
   gather_facts: false
@@ -41,21 +41,6 @@
       debug:
         msg: "Found {{ k8s_files.files | length }} manifest files: {{ k8s_files.files | map(attribute='path') | map('basename') | list }}"
 
-    - name: Update backend ConfigMap with S3 bucket name
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: backend-config
-            namespace: "{{ app_namespace }}"
-          data:
-            AWS_DEFAULT_REGION: "us-east-1"
-            S3_BUCKET_NAME: "{{ s3_bucket_name }}"
-        merge_type: merge
-      when: s3_bucket_name is defined
-
     - name: Deploy Kubernetes manifests
       kubernetes.core.k8s:
         state: present
@@ -63,11 +48,13 @@
         namespace: "{{ app_namespace }}"
       loop: "{{ k8s_files.files }}"
       register: deploy_result
+      tags: app
 
     - name: Wait a moment for deployments to start
       pause:
         seconds: 10
       when: deploy_result.changed
+      tags: app
 
     - name: Check deployment status
       kubernetes.core.k8s_info:
@@ -75,6 +62,7 @@
         kind: Deployment
         namespace: "{{ app_namespace }}"
       register: deployments
+      tags: app
 
     - name: Display deployment status
       debug:
@@ -84,6 +72,7 @@
           Status: {{ item.status.conditions[-1].type if item.status.conditions is defined else 'Unknown' }}
       loop: "{{ deployments.resources }}"
       when: deployments.resources is defined and deployments.resources | length > 0
+      tags: app
 
     - name: Get services information
       kubernetes.core.k8s_info:
@@ -91,6 +80,7 @@
         kind: Service
         namespace: "{{ app_namespace }}"
       register: services
+      tags: app
 
     - name: Display service information
       debug:
@@ -104,3 +94,86 @@
           {% endif %}
       loop: "{{ services.resources }}"
       when: services.resources is defined and services.resources | length > 0
+      tags: app
+
+    # Monitoring Stack
+    - name: Add Prometheus Helm repository
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: https://prometheus-community.github.io/helm-charts
+      tags: monitoring
+
+    - name: Create monitoring namespace
+      kubernetes.core.k8s:
+        name: monitoring
+        api_version: v1
+        kind: Namespace
+        state: present
+      tags: monitoring
+
+    - name: Install kube-prometheus-stack
+      kubernetes.core.helm:
+        name: prometheus
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: monitoring
+        create_namespace: false
+        values:
+          grafana:
+            adminPassword: "admin123"
+            service:
+              type: LoadBalancer
+              annotations:
+                service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+            persistence:
+              enabled: true
+              storageClassName: gp2
+              size: 10Gi
+          prometheus:
+            prometheusSpec:
+              retention: 15d
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: gp2
+                    accessModes:
+                      - ReadWriteOnce
+                    resources:
+                      requests:
+                        storage: 50Gi
+          alertmanager:
+            enabled: true
+            alertmanagerSpec:
+              storage:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: gp2
+                    accessModes:
+                      - ReadWriteOnce
+                    resources:
+                      requests:
+                        storage: 10Gi
+        timeout: 1200s
+        wait: true
+      tags: monitoring
+
+    - name: Get Grafana service information
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        name: prometheus-grafana
+        namespace: monitoring
+      register: grafana_service
+      tags: monitoring
+
+    - name: Display Grafana access information
+      debug:
+        msg: |
+          Grafana Dashboard Access:
+          {% if grafana_service.resources[0].spec.type == 'LoadBalancer' and grafana_service.resources[0].status.loadBalancer.ingress is defined %}
+          URL: http://{{ grafana_service.resources[0].status.loadBalancer.ingress[0].hostname }}
+          {% else %}
+          URL: Pending LoadBalancer assignment - check 'kubectl get svc prometheus-grafana -n monitoring'
+          {% endif %}
+          Username: admin
+          Password: admin123
+      tags: monitoring

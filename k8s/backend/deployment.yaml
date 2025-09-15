@@ -18,6 +18,10 @@ spec:
           image: omerbenda98/devops-qr-code-api:latest
           ports:
             - containerPort: 8000
+              name: http
+            - containerPort: 8000 # Same port, different name for metrics
+              name: metrics
+
           envFrom:
             - configMapRef:
                 name: backend-config
